@@ -9,29 +9,36 @@ const db = new sqlite3.Database('chat.db', (err) => {
     }
 });
 
-// Crear la tabla si no existe
+// Crear las tablas si no existen
 db.serialize(() => {
+    // Tabla de usuarios
     db.run(`
-    CREATE TABLE IF NOT EXISTS messages (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      username TEXT NOT NULL,
-      message TEXT NOT NULL,
-      timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
+    CREATE TABLE IF NOT EXISTS users (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        username TEXT NOT NULL UNIQUE,
+        socket_id TEXT,
+        status TEXT DEFAULT 'offline',
+        last_seen DATETIME DEFAULT CURRENT_TIMESTAMP
     )
-  `, (err) => {
+    `, (err) => {
         if (err) {
-            console.error('Error al crear la tabla:', err.message);
+            console.error('Error al crear la tabla users:', err.message);
         }
     });
- // Tabla de mensajes públicos
- db.run(`
+
+    // Tabla de mensajes públicos
+    db.run(`
     CREATE TABLE IF NOT EXISTS messages (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         username TEXT NOT NULL,
         message TEXT NOT NULL,
         timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
     )
-    `);
+    `, (err) => {
+        if (err) {
+            console.error('Error al crear la tabla messages:', err.message);
+        }
+    });
 
     // Tabla de mensajes privados
     db.run(`
@@ -42,13 +49,14 @@ db.serialize(() => {
         message TEXT NOT NULL,
         timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
     )
-    `);
-
-
+    `, (err) => {
+        if (err) {
+            console.error('Error al crear la tabla private_messages:', err.message);
+        }
+    });
 });
 
-//funciones para usuarios
-
+// Funciones para usuarios
 const saveUser = (username, socket_id) => {
     return new Promise((resolve, reject) => {
         db.run(
@@ -76,37 +84,34 @@ const updateUserStatus = (socket_id, status) => {
     });
 };
 
-// Exportar funciones para operaciones con la base de datos
-const getMessages = (callback) => {
-    db.all('SELECT * FROM messages ORDER BY timestamp ASC', [], (err, rows) => {
-        if (err) {
-            console.error('Error al recuperar mensajes:', err.message);
-            callback(err, null);
-        } else {
-            callback(null, rows);
-        }
+// Funciones para mensajes públicos
+const getMessages = () => {
+    return new Promise((resolve, reject) => {
+        db.all('SELECT * FROM messages ORDER BY timestamp DESC LIMIT 50', [], (err, rows) => {
+            if (err) reject(err);
+            else resolve(rows);
+        });
     });
 };
 
-const saveMessage = (username, message, callback) => {
-    db.run(
-        `INSERT INTO messages (username, message) VALUES (?, ?)`,
-        [username, message],
-        function (err) {
-            if (err) {
-                console.error('Error al guardar el mensaje:', err.message);
-                callback(err);
-            } else {
-                callback(null, {
+const saveMessage = (username, message) => {
+    return new Promise((resolve, reject) => {
+        db.run(
+            `INSERT INTO messages (username, message) VALUES (?, ?)`,
+            [username, message],
+            function(err) {
+                if (err) reject(err);
+                else resolve({
                     id: this.lastID,
                     username,
                     message,
-                    timestamp: new Date().toISOString(),
+                    timestamp: new Date().toISOString()
                 });
             }
-        }
-    );
+        );
+    });
 };
+
 // Funciones para mensajes privados
 const savePrivateMessage = (sender_username, receiver_username, message) => {
     return new Promise((resolve, reject) => {
@@ -143,4 +148,27 @@ const getPrivateMessages = (username1, username2) => {
         );
     });
 };
-module.exports = { getMessages, saveMessage, savePrivateMessage, getPrivateMessages, saveUser, updateUserStatus };
+
+// Función para obtener usuarios en línea
+const getOnlineUsers = () => {
+    return new Promise((resolve, reject) => {
+        db.all(
+            'SELECT username, status, last_seen FROM users WHERE status = "online"',
+            [],
+            (err, rows) => {
+                if (err) reject(err);
+                else resolve(rows);
+            }
+        );
+    });
+};
+
+module.exports = {
+    getMessages,
+    saveMessage,
+    saveUser,
+    updateUserStatus,
+    savePrivateMessage,
+    getPrivateMessages,
+    getOnlineUsers
+};
