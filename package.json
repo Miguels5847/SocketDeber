@@ -15,8 +15,12 @@
   "dependencies": {
     "cors": "^2.8.5",
     "express": "^4.21.2",
+    "node-emoji": "^2.2.0",
     "socket": "file:",
     "socket.io": "^4.8.1",
     "sqlite3": "^5.1.7"
+  },
+  "devDependencies": {
+    "nodemon": "^3.1.9"
   }
 }

@@ -1,94 +1,195 @@
 <!DOCTYPE html>
-<html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Chat</title>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Chat Avanzado</title>
     <script src="https://cdn.tailwindcss.com"></script>
-  </head>
-  <body class="bg-gray-100 font-sans">
+</head>
+<body class="bg-gray-100 font-sans">
     <!-- Encabezado -->
     <header class="bg-blue-600 text-white py-4 text-center">
-      <h1 class="text-2xl font-bold">Chat Grupal</h1>
+        <h1 class="text-2xl font-bold">Chat Avanzado</h1>
     </header>
 
     <!-- Contenedor Principal -->
-    <main class="flex flex-col items-center p-6">
-      <!-- Lista de Mensajes -->
-      <ul
-        id="messages"
-        class="w-full max-w-md bg-white p-4 rounded-lg shadow-lg mb-4 h-80 overflow-y-auto"
-      >
-        <!-- Mensajes serán añadidos aquí -->
-      </ul>
+    <main class="flex flex-col md:flex-row gap-4 p-6 max-w-6xl mx-auto">
+        <!-- Lista de Usuarios -->
+        <aside class="w-full md:w-1/4 bg-white p-4 rounded-lg shadow-lg">
+            <h2 class="text-lg font-semibold mb-4">Usuarios</h2>
+            <ul id="userList" class="space-y-2">
+                <!-- Los usuarios se añadirán aquí -->
+            </ul>
+        </aside>
 
-      <!-- Formulario de Entrada -->
-      <form id="form" class="w-full max-w-md flex gap-2">
-        <input
-          id="username"
-          placeholder="Tu nombre"
-          required
-          class="flex-1 p-2 rounded-md border border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500"
-        />
-        <input
-          id="input"
-          autocomplete="off"
-          placeholder="Escribe un mensaje..."
-          required
-          class="flex-1 p-2 rounded-md border border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500"
-        />
-        <button
-          type="submit"
-          class="bg-blue-600 text-white px-4 py-2 rounded-md shadow-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
-        >
-          Enviar
-        </button>
-      </form>
+        <!-- Área de Chat -->
+        <section class="w-full md:w-3/4 flex flex-col">
+            <!-- Lista de Mensajes -->
+            <div class="bg-white p-4 rounded-lg shadow-lg mb-4 h-[500px] overflow-y-auto">
+                <ul id="messages" class="space-y-2">
+                    <!-- Los mensajes se añadirán aquí -->
+                </ul>
+                <div id="typingIndicator" class="text-sm text-gray-500 italic"></div>
+            </div>
+
+            <!-- Formulario de Entrada -->
+            <form id="form" class="flex gap-2">
+                <input
+                    id="username"
+                    placeholder="Tu nombre"
+                    required
+                    class="flex-1 p-2 rounded-md border border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+                <input
+                    id="receiver"
+                    placeholder="Destinatario (opcional)"
+                    class="flex-1 p-2 rounded-md border border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+                <input
+                    id="input"
+                    autocomplete="off"
+                    placeholder="Escribe un mensaje..."
+                    required
+                    class="flex-1 p-2 rounded-md border border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+                <button
+                    type="submit"
+                    class="bg-blue-600 text-white px-4 py-2 rounded-md shadow-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                >
+                    Enviar
+                </button>
+            </form>
+        </section>
     </main>
 
     <script src="/socket.io/socket.io.js"></script>
     <script>
-      const socket = io();
-      const form = document.getElementById("form");
-      const input = document.getElementById("input");
-      const username = document.getElementById("username");
-      const messages = document.getElementById("messages");
+        const socket = io();
+        const form = document.getElementById('form');
+        const input = document.getElementById('input');
+        const messages = document.getElementById('messages');
+        const username = document.getElementById('username');
+        const receiver = document.getElementById('receiver');
+        const userList = document.getElementById('userList');
+        const typingIndicator = document.getElementById('typingIndicator');
 
-      // Mostrar historial de mensajes
-      socket.on("chat history", (history) => {
-        history.forEach(({ username, message, timestamp }) => {
-          const li = document.createElement("li");
-          li.classList.add("mb-2", "text-sm", "text-gray-600");
-          li.textContent = `[${new Date(
-            timestamp
-          ).toLocaleTimeString()}] ${username}: ${message}`;
-          messages.appendChild(li);
+        let typingTimeout;
+        const onlineUsers = new Map();
+
+        // Registrar usuario al conectar
+        username.addEventListener('change', () => {
+            if (username.value) {
+                socket.emit('register user', username.value);
+                username.disabled = true; // Bloquear el campo después de registrar
+            }
         });
-        messages.scrollTop = messages.scrollHeight; // Desplazar hacia abajo automáticamente
-      });
 
-      // Enviar mensaje al servidor
-      form.addEventListener("submit", (e) => {
-        e.preventDefault();
-        if (input.value && username.value) {
-          socket.emit("chat message", {
-            username: username.value,
-            message: input.value,
-          });
-          input.value = "";
+        // Manejar envío de mensajes
+        form.addEventListener('submit', (e) => {
+            e.preventDefault();
+            if (input.value && username.value) {
+                const messageData = {
+                    message: input.value
+                };
+
+                // Verificar si es mensaje privado
+                if (receiver.value) {
+                    messageData.to = receiver.value;
+                    socket.emit('private message', messageData);
+                } else {
+                    socket.emit('chat message', messageData);
+                }
+                
+                input.value = '';
+            }
+        });
+
+        // Detectar cuando el usuario está escribiendo
+        input.addEventListener('input', () => {
+            socket.emit('typing', true);
+            clearTimeout(typingTimeout);
+            
+            typingTimeout = setTimeout(() => {
+                socket.emit('typing', false);
+            }, 1000);
+        });
+
+        // Recibir mensajes públicos
+        socket.on('chat message', (data) => {
+            const li = document.createElement('li');
+            li.classList.add('mb-2', 'text-sm');
+            const time = new Date(data.timestamp).toLocaleTimeString();
+            li.textContent = `[${time}] ${data.username}: ${data.message}`;
+            messages.appendChild(li);
+            messages.scrollTop = messages.scrollHeight;
+        });
+
+        // Recibir mensajes privados
+        socket.on('private message', (data) => {
+            const li = document.createElement('li');
+            li.classList.add('mb-2', 'text-sm', 'text-purple-600');
+            const time = new Date(data.timestamp).toLocaleTimeString();
+            li.textContent = `[${time}] (Privado) ${data.sender_username} → ${data.receiver_username}: ${data.message}`;
+            messages.appendChild(li);
+            messages.scrollTop = messages.scrollHeight;
+        });
+
+        // Recibir historial de mensajes
+        socket.on('chat history', (history) => {
+            messages.innerHTML = ''; // Limpiar mensajes existentes
+            history.forEach(msg => {
+                const li = document.createElement('li');
+                li.classList.add('mb-2', 'text-sm');
+                const time = new Date(msg.timestamp).toLocaleTimeString();
+                li.textContent = `[${time}] ${msg.username}: ${msg.message}`;
+                messages.appendChild(li);
+            });
+            messages.scrollTop = messages.scrollHeight;
+        });
+
+        // Actualizar estado de usuarios
+        socket.on('user status', (data) => {
+            if (data.status === 'online') {
+                onlineUsers.set(data.username, true);
+            } else {
+                onlineUsers.delete(data.username);
+            }
+            updateUserList();
+        });
+
+        // Actualizar indicador de escritura
+        socket.on('typing users', (typingUsers) => {
+            if (typingUsers.length > 0) {
+                const typingText = typingUsers
+                    .filter(user => user !== username.value)
+                    .join(', ');
+                if (typingText) {
+                    typingIndicator.textContent = `${typingText} está(n) escribiendo...`;
+                } else {
+                    typingIndicator.textContent = '';
+                }
+            } else {
+                typingIndicator.textContent = '';
+            }
+        });
+
+        // Función para actualizar la lista de usuarios
+        function updateUserList() {
+            userList.innerHTML = '';
+            onlineUsers.forEach((status, user) => {
+                const li = document.createElement('li');
+                li.classList.add('flex', 'items-center', 'gap-2');
+                li.innerHTML = `
+                    <span class="w-2 h-2 rounded-full bg-green-500"></span>
+                    <span>${user}</span>
+                `;
+                li.addEventListener('click', () => {
+                    receiver.value = user;
+                    input.focus();
+                });
+                userList.appendChild(li);
+            });
         }
-      });
-
-      // Recibir mensaje del servidor
-      socket.on("chat message", ({ username, message, timestamp }) => {
-        const li = document.createElement("li");
-        li.classList.add("mb-2", "text-sm", "text-gray-600");
-        li.textContent = `[${new Date(
-          timestamp
-        ).toLocaleTimeString()}] ${username}: ${message}`;
-        messages.appendChild(li);
-        messages.scrollTop = messages.scrollHeight; // Desplazar hacia abajo automáticamente
-      });
     </script>
-  </body>
+</body>
 </html>
