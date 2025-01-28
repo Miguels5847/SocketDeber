@@ -1,15 +1,18 @@
+require('dotenv').config();
 const express = require('express');
 const http = require('http');
 const { Server } = require('socket.io');
 const path = require('path');
 const emoji = require('node-emoji');
 const {
+    initDatabase,
     getMessages,
     saveMessage,
     saveUser,
     updateUserStatus,
     savePrivateMessage,
-    getPrivateMessages
+    getPrivateMessages,
+    getOnlineUsers
 } = require('./database');
 
 const app = express();
@@ -37,8 +40,13 @@ io.on('connection', (socket) => {
             
             // Notificar a todos que un nuevo usuario está en línea
             io.emit('user status', { username, status: 'online' });
+            
+            // Enviar lista de usuarios en línea
+            const onlineUsers = await getOnlineUsers();
+            io.emit('online users', onlineUsers);
         } catch (error) {
             console.error('Error al registrar usuario:', error);
+            socket.emit('error', 'Error al registrar usuario');
         }
     });
 
@@ -112,8 +120,16 @@ io.on('connection', (socket) => {
     });
 });
 
-// Usar el puerto proporcionado por Render o 3000 como fallback
-const PORT = process.env.PORT || 3000;
-server.listen(PORT, '0.0.0.0', () => {
-    console.log(`Servidor corriendo en el puerto ${PORT}`);
-});
+const PORT = process.env.PORT || 3001;
+
+// Inicializar la base de datos antes de arrancar el servidor
+initDatabase()
+    .then(() => {
+        server.listen(PORT, () => {
+            console.log(`Servidor corriendo en el puerto ${PORT}`);
+        });
+    })
+    .catch(err => {
+        console.error('Error al inicializar la base de datos:', err);
+        process.exit(1);
+    });
